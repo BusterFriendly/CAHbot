@@ -5,6 +5,7 @@ from twisted.words.protocols import irc
 from twisted.internet import protocol
 from twisted.internet import reactor
 
+network = 'asimov.freenode.net'
 chan = '#testedCAH'
 db = 'cah.db'
 
@@ -21,7 +22,7 @@ class Bot(irc.IRCClient):
     def __init__(self):
         self.lineRate = 1
         self.players = []
-        self.white_cards = {}
+        self.white_cards = []
         self.black_cards = []
         #self.play_num = 0
         self.current_black = ''
@@ -39,6 +40,7 @@ class Bot(irc.IRCClient):
         self.rando_score = 0
         self.draw = 1
         self.multi_only = False
+        self.dealer_plays = False
         
     def _get_nickname(self):
         return self.factory.nickname
@@ -64,6 +66,7 @@ class Bot(irc.IRCClient):
     def joined(self, channel):
         print "Joined %s." % (channel,)
 
+
     def sendmessage(self, username, channel, msg):
         if channel == username:
             self.msg(username, msg)
@@ -75,6 +78,11 @@ class Bot(irc.IRCClient):
         print user + ":" + msg
         if msg.startswith("!play"):
             self.add_player(username, channel)
+            return
+        elif msg.startswith("!dealerplays"):
+            self.dealer_plays = not self.dealer_plays
+            msg = "Dealer plays: " + str(self.dealer_plays)
+            self.msg(channel, msg)
             return
         elif msg.startswith("!help"):
             msg = """!play - join player list.
@@ -126,7 +134,7 @@ class Bot(irc.IRCClient):
                     player = x.name
                     msg = ''
                     for i in x.hand:
-                        player_card = "%d - %s\n" %(i, x.hand[i])
+                        player_card = "%d - %s\n" %(i,x.hand[i])
                         msg = msg + player_card                        
             self.msg(player, msg)
             return
@@ -219,7 +227,7 @@ class Bot(irc.IRCClient):
             self.vote_count = 0
             self.running = False
             self.players = []
-            self.white_cards = {}
+            self.white_cards = []
             self.black_cards = []
             self.rando = False
             self.rando_score = 0
@@ -253,30 +261,33 @@ class Bot(irc.IRCClient):
                 pass
 
     def play(self, username, msg):
-        if username == self.players[self.current_dealer].name:
+        if username == self.players[self.current_dealer].name and not self.dealer_plays:
             msg = "You're the Card Czar, you don't play this round!"
             self.msg(username, msg)
             return
         msg = msg.split(" ")
         played_cards = []
         index = []
+        hand_index = []
         for x in msg:
             key = int(x)
             index.append(key)
         if len(index) < self.draw:
             self.msg(username, "Not enough cards to complete the sentence. Try again!")
             return
+        print "play index:"
+        print index
         for x in self.players:
             if x.name == username:
                 for key in index:
                     if key in x.hand:
-                        played_cards.append((key, x.hand[key], username))
+                        played_cards.append((x, x.hand[key], username))
                         del x.hand[key]
-                        print played_cards
                     else:
                         msg = "You don't have card #%d." %key
                         self.msg(username, msg)
                         return
+
                 msg = self.construct_sentence(self.played_black, played_cards)
                 self.msg(username, msg)
                 self.played_white.append((len(self.played_white), msg, username))
@@ -284,7 +295,7 @@ class Bot(irc.IRCClient):
                 print self.played_white
                 print len(self.played_white)
                 print len(self.players)
-        if len(self.played_white) >= len(self.players)-1+self.rando:
+        if len(self.played_white) >= len(self.players)-1+self.rando+self.dealer_plays:
             self.start_voting()
             
 
@@ -333,7 +344,7 @@ class Bot(irc.IRCClient):
                 player = x.name
                 msg = ''
                 for i in x.hand:
-                    player_card = "%d - %s\n" %(i, x.hand[i])
+                    player_card = "%d - %s\n" %(i[0], i[1])
                     msg = msg + player_card                        
         self.msg(player, msg)
 
@@ -379,9 +390,9 @@ class Bot(irc.IRCClient):
         for x in range(0, 3):
             key = randint(1, len(self.white_cards)-1)
             print key
-            while key not in self.white_cards:
-                key = randint(1, len(self.white_cards)-1)
-            card = self.white_cards[key]
+            #while key not in self.white_cards:
+                #key = randint(1, len(self.white_cards)-1)
+            card = self.white_cards[key][1]
             print card
             card = card.encode('ascii', 'ignore')
             msg = msg+card+" \ "
@@ -395,9 +406,9 @@ class Bot(irc.IRCClient):
         for x in range(0, self.draw):
             key = randint(1, len(self.white_cards)-1)
             print key
-            while key not in self.white_cards:
-                key = randint(1, len(self.white_cards)-1)
-            card = self.white_cards[key]
+            #while key not in self.white_cards:
+                #key = randint(1, len(self.white_cards)-1)
+            card = self.white_cards[key][1]
             print card
             card = card.encode('ascii', 'ignore')
             card = (key, card, 'Rando')
@@ -409,21 +420,23 @@ class Bot(irc.IRCClient):
 
     def deal_cards(self, count, who):
         for x in who:
+            print x.name
             msg = ''
             for i in range(0, count):
                 key = randint(1, len(self.white_cards)-1)
-                print key
-                while key not in self.white_cards:
-                    key = randint(1, len(self.white_cards)-1)
+##                #while key not in self.white_cards:
+                    #key = randint(1, len(self.white_cards)-1)
                 card = self.white_cards[key]
                 print card
-                x.hand[key] = card.encode('ascii', 'ignore')
-                dealt_card = "%d - %s\n" %(key, x.hand[key])
+                card = (int(card[0]), card[1].encode('ascii', 'ignore'))
+                dealt_card = "%d - %s\n" %(card[0], card[1])
                 msg = msg + dealt_card
                 del self.white_cards[key]
+                x.hand[card[0]] = card[1]
             self.sendmessage(x.name, x.name, msg)
 
     def add_player(self, username, channel):
+        print "adding" + username
         for x in self.players:
             if x.name == username:
                 msg = "%s is already playing!" %username
@@ -452,6 +465,7 @@ class Bot(irc.IRCClient):
 
     def setup(self):
         self.played_white = []
+        self.rando_score = 0
         conn = sqlite3.connect(db)
         cur = conn.execute('SELECT * FROM black')
         if self.multi_only:
@@ -464,7 +478,7 @@ class Bot(irc.IRCClient):
         print len(self.black_cards)
         cur = conn.execute('SELECT * FROM white')
         for x in cur:
-            self.white_cards[x[0]] = x[1]
+            self.white_cards.append(x)
         print len(self.white_cards)
         conn.close()
         for x in self.players:
@@ -494,7 +508,7 @@ class BotFactory(protocol.ClientFactory):
 
 
 if __name__ == "__main__":
-    reactor.connectTCP('irc.freenode.net', 6667, BotFactory(chan))
+    reactor.connectTCP(network, 6667, BotFactory(chan))
     reactor.run()
         
     

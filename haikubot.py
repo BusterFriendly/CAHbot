@@ -33,27 +33,20 @@ class Bot(irc.IRCClient):
     def privmsg(self, user, channel, msg):
         username = user.split('!')[0]
         if msg.startswith("!haiku"):
-            self.haiku_alt(channel)
-            
+            self.haiku(channel)
 
     def haiku(self, channel):
-        for x in range(0, 3):
-            key = randint(1, len(self.white_cards)-1)
-            print self.white_cards[key]
-            card = self.white_cards[key][1]
-            print card
-            card = card.encode('ascii', 'ignore')
-            self.msg(channel, card)
-
-    def haiku_alt(self, channel):
         line1 = self.get_card()
         line2 = self.get_card()
         line3 = self.get_card()
 
-        while len(line1)>len(line2):
+        while len(line2)<20:
+            line2 = self.get_card()
+
+        while len(line1)>=len(line2):
             line1 = self.get_card()
 
-        while len(line3)>len(line2):
+        while len(line3)>=len(line2):
             line3 = self.get_card()
 
         msg = line1+"\n"+line2+"\n"+line3
@@ -67,7 +60,6 @@ class Bot(irc.IRCClient):
         card = self.white_cards[key][1]
         return card.encode('ascii', 'ignore')
         
-
             
             
     
